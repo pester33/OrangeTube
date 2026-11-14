@@ -165,7 +165,7 @@ $('#loginForm').onsubmit = async e => {
   if (error) return setAuthMsg(error.message, 'err');
   e.target.reset();
   closeAuth();
-  toast('Welcome back! 🍊');
+  toast('Welcome back!');
 };
 
 $('#signupForm').onsubmit = async e => {
@@ -189,7 +189,7 @@ $('#signupForm').onsubmit = async e => {
   e.target.reset();
   if (data.session) {
     closeAuth();
-    toast(`Channel created — welcome, ${username}! 🍊`);
+    toast(`Channel created — welcome, ${username}!`);
   } else {
     setAuthMsg('Account made, but Supabase still wants email confirmation. Turn off "Confirm email" in Supabase → Authentication → Sign In / Providers → Email.', 'err');
   }
@@ -224,7 +224,7 @@ async function pageTrending() {
   skeletonGrid();
   const { data, error } = await sb.from('videos').select(VIDEO_SELECT).eq('is_short', false).order('views', { ascending: false }).limit(60);
   if (error) return showDbError(error);
-  view.innerHTML = `<h1 class="page-title">🔥 Trending</h1>`;
+  view.innerHTML = `<h1 class="page-title">Trending</h1>`;
   view.insertAdjacentHTML('beforeend', data?.length ? `<div class="grid">${data.map(cardHTML).join('')}</div>` : empty('Nothing trending yet'));
 }
 
@@ -259,7 +259,7 @@ async function pageLiked() {
   skeletonGrid();
   const { data } = await sb.from('likes').select(`created_at, videos(${VIDEO_SELECT})`).eq('user_id', session.user.id).order('created_at', { ascending: false });
   const vids = (data || []).map(l => l.videos).filter(Boolean);
-  view.innerHTML = `<h1 class="page-title">👍 Liked videos</h1>`;
+  view.innerHTML = `<h1 class="page-title">Liked videos</h1>`;
   view.insertAdjacentHTML('beforeend', vids.length ? `<div class="grid">${vids.map(cardHTML).join('')}</div>` : empty('No liked videos yet'));
 }
 
@@ -518,9 +518,9 @@ function pageUpload(mode = 'video') {
     return;
   }
   const modes = `<div class="chips">
-    <a class="chip ${mode === 'video' ? 'active' : ''}" href="#/upload/video">🎬 Video</a>
-    <a class="chip ${mode === 'short' ? 'active' : ''}" href="#/upload/short">📱 Short</a>
-    <a class="chip ${mode === 'pictures' ? 'active' : ''}" href="#/upload/pictures">🖼️ Pictures</a>
+    <a class="chip ${mode === 'video' ? 'active' : ''}" href="#/upload/video">Video</a>
+    <a class="chip ${mode === 'short' ? 'active' : ''}" href="#/upload/short">Short</a>
+    <a class="chip ${mode === 'pictures' ? 'active' : ''}" href="#/upload/pictures">Pictures</a>
   </div>`;
   if (mode === 'pictures') return uploadPictures(modes);
 
@@ -562,8 +562,8 @@ function pageUpload(mode = 'video') {
     const m = await videoMeta(file);
     const hint = $('#shortHint');
     hint.textContent = '';
-    if (m && isShort && (m.w > m.h || m.d > 180)) hint.textContent = '⚠️ Shorts work best vertical and under 3 minutes. This one will still upload.';
-    if (m && !isShort && m.h > m.w && m.d <= 180) hint.innerHTML = '💡 This looks like a Short. <a href="#/upload/short" style="color:var(--orange-2)">Upload it as a Short instead</a>';
+    if (m && isShort && (m.w > m.h || m.d > 180)) hint.textContent = 'Shorts work best vertical and under 3 minutes. This one will still upload.';
+    if (m && !isShort && m.h > m.w && m.d <= 180) hint.innerHTML = 'This looks like a Short. <a href="#/upload/short" style="color:var(--orange-2)">Upload it as a Short instead</a>';
     if (!form.thumb.files[0]) {
       autoThumb = await grabFrame(file);
       if (autoThumb) $('#tPrev').src = URL.createObjectURL(autoThumb);
@@ -583,7 +583,7 @@ function pageUpload(mode = 'video') {
     const file = form.video.files[0];
     if (!file) return toast('Choose a video first');
     if (file.size > MAX_UPLOAD_MB * 1048576) {
-      $('#upStatus').textContent = `❌ This video is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${MAX_UPLOAD_MB} MB, so compress it or trim it first.`;
+      $('#upStatus').classList.add('err'); $('#upStatus').textContent = `This video is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${MAX_UPLOAD_MB} MB, so compress it or trim it first.`;
       return;
     }
     const btn = $('#upBtn'), status = $('#upStatus'), prog = $('#prog'), bar = prog.firstElementChild;
@@ -591,7 +591,7 @@ function pageUpload(mode = 'video') {
     const uid = session.user.id, stamp = Date.now();
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
     try {
-      status.textContent = 'Uploading video… (large files can take a while)';
+      status.classList.remove('err'); status.textContent = 'Uploading video… (large files can take a while)';
       let pct = 5;
       const tick = setInterval(() => { pct = Math.min(85, pct + 2); bar.style.width = pct + '%'; }, 600);
       const vPath = `${uid}/${stamp}.${ext}`;
@@ -617,11 +617,11 @@ function pageUpload(mode = 'video') {
       }).select('id').single();
       if (error) throw error;
       bar.style.width = '100%';
-      toast(isShort ? 'Short published! 🍊' : 'Video published! 🍊');
+      toast(isShort ? 'Short published!' : 'Video published!');
       location.hash = isShort ? `#/shorts/${data.id}` : `#/watch/${data.id}`;
     } catch (err) {
       console.error(err);
-      status.textContent = '❌ ' + (err.message || 'Upload failed') +
+      status.classList.add('err'); status.textContent = (err.message || 'Upload failed') +
         (/size|exceed|413/i.test(err.message || '') ? ` — the file is bigger than the storage limit (${MAX_UPLOAD_MB} MB).` : '');
       btn.disabled = false;
     }
@@ -654,7 +654,7 @@ function uploadPictures(modes) {
     const el = $('#picPreview');
     if (!files.length) { el.innerHTML = ''; return; }
     el.innerHTML = `<div class="pic-thumbs">${files.map((f, i) => `
-      <div class="pic-thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-rm="${i}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
+      <div class="pic-thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-rm="${i}" aria-label="Remove"><svg viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join('')}</div>`;
     $$('[data-rm]', el).forEach(b => (b.onclick = () => { files.splice(+b.dataset.rm, 1); show(); }));
   };
   const add = list => {
@@ -671,7 +671,7 @@ function uploadPictures(modes) {
     e.preventDefault();
     if (!files.length) return toast('Choose at least one picture');
     const big = files.find(f => f.size > MAX_UPLOAD_MB * 1048576);
-    if (big) return ($('#upStatus').textContent = `❌ ${big.name} is over ${MAX_UPLOAD_MB} MB.`);
+    if (big) return ($('#upStatus').classList.add('err'), $('#upStatus').textContent = `${big.name} is over ${MAX_UPLOAD_MB} MB.`);
     const btn = $('#upBtn'), status = $('#upStatus'), prog = $('#prog'), bar = prog.firstElementChild;
     btn.disabled = true; prog.hidden = false;
     const uid = session.user.id, stamp = Date.now(), urls = [];
@@ -690,11 +690,11 @@ function uploadPictures(modes) {
       const { error } = await sb.from('posts').insert({ user_id: uid, caption: form.caption.value.trim(), images: urls });
       if (error) throw error;
       bar.style.width = '100%';
-      toast('Posted! 🍊');
+      toast('Posted!');
       location.hash = '#/posts';
     } catch (err) {
       console.error(err);
-      status.textContent = '❌ ' + (err.message || 'Upload failed');
+      status.classList.add('err'); status.textContent = (err.message || 'Upload failed');
       btn.disabled = false;
     }
   };
@@ -980,7 +980,7 @@ async function pagePosts() {
   spinner();
   const { data, error } = await sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(40);
   if (error) return showDbError(error);
-  view.innerHTML = `<div class="posts-wrap"><h1 class="page-title">🖼️ Pictures
+  view.innerHTML = `<div class="posts-wrap"><h1 class="page-title">Pictures
     <a class="btn primary" href="#/upload/pictures" style="margin-left:auto">+ Post</a></h1><div id="postList"></div></div>`;
   renderPosts($('#postList'), data);
 }

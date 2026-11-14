@@ -1,4 +1,4 @@
-# 🍊 Orange Tube
+# Orange Tube
 
 A video-sharing site with an orange theme: upload, watch, like, comment, subscribe. It runs as a static site with no build step. Supabase handles auth, the database and file storage.
 
