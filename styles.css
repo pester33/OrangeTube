@@ -19,7 +19,7 @@
 html, body { margin: 0; }
 body {
   font-family: 'Outfit', system-ui, sans-serif;
-  background: radial-gradient(1200px 600px at 80% -10%, rgba(255,122,0,.10), transparent 60%), var(--bg);
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
 }
@@ -58,7 +58,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 }
 .btn:hover { border-color: var(--orange); }
 .btn.primary { background: linear-gradient(135deg, var(--orange-2), var(--orange)); border-color: transparent; color: #1a0d00; }
-.btn.primary:hover { filter: brightness(1.08); box-shadow: 0 4px 18px rgba(255,122,0,.35); }
+.btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: transparent; }
 .btn.active { background: var(--text); color: var(--bg); }
 .btn.block { width: 100%; justify-content: center; padding: 12px; }
@@ -139,7 +139,7 @@ body.side-collapsed .view { margin-left: 0; }
 
 /* ---------- Watch page ---------- */
 .watch { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; max-width: 1700px; }
-.player { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: var(--radius); display: block; box-shadow: 0 0 0 1px var(--line), 0 10px 50px rgba(255,122,0,.08); }
+.player { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: var(--radius); display: block; box-shadow: 0 0 0 1px var(--line); }
 .watch h1 { font-size: 1.35rem; margin: 14px 0 10px; }
 .watch-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .channel-chip { display: flex; align-items: center; gap: 12px; }
@@ -169,7 +169,6 @@ body.side-collapsed .view { margin-left: 0; }
 
 /* ---------- Channel page ---------- */
 .banner { height: 180px; border-radius: var(--radius); background: linear-gradient(120deg, #ff9a3c, #ff7a00 40%, #b34400); margin-bottom: 20px; position: relative; overflow: hidden; }
-.banner::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 85% 30%, rgba(255,255,255,.25), transparent 40%); }
 .channel-head { display: flex; align-items: center; gap: 22px; margin-bottom: 26px; flex-wrap: wrap; }
 .channel-head h1 { margin: 0 0 4px; font-size: 1.9rem; }
 .channel-head p { margin: 0 0 4px; color: var(--muted); }
@@ -181,7 +180,7 @@ body.side-collapsed .view { margin-left: 0; }
 .form input[type=text], .form textarea, .auth-form input {
   background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; outline: none;
 }
-.form input:focus, .form textarea:focus, .auth-form input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
+.form input:focus, .form textarea:focus, .auth-form input:focus { border-color: var(--orange); }
 .form textarea { min-height: 110px; resize: vertical; }
 .drop {
   border: 2px dashed var(--line); border-radius: var(--radius); padding: 34px; text-align: center; cursor: pointer;
