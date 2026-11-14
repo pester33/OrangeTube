@@ -16,7 +16,7 @@ A video-sharing site with an orange theme: upload, watch, like, comment, subscri
 ## Setup (one time)
 1. Open your Supabase project, then **SQL Editor → New query**. Paste in all of [`supabase/schema.sql`](supabase/schema.sql) and click **Run**.
    This creates the tables, Row Level Security policies, the sign-up trigger and the `videos`, `thumbnails` and `avatars` storage buckets.
-   Then run [`supabase/02_shorts_and_posts.sql`](supabase/02_shorts_and_posts.sql) the same way, for Shorts and Pictures.
+   Then run [`supabase/02_shorts_and_posts.sql`](supabase/02_shorts_and_posts.sql) and [`supabase/03_admin_and_verified.sql`](supabase/03_admin_and_verified.sql) the same way.
 2. In **Authentication → URL Configuration**, set **Site URL** to where you host the site (e.g. `https://pester33.github.io/OrangeTube/`).
 3. Optional: in **Authentication → Providers → Email**, turn off *Confirm email* if you want sign-ups to log in straight away.
 4. Optional: in **Storage → Settings**, raise the upload file size limit. The free tier allows 50 MB per file.

@@ -33,6 +33,11 @@ function avatar(p, cls = '') {
   if (p?.avatar_url) return `<img class="avatar ${cls}" src="${esc(p.avatar_url)}" alt="">`;
   return `<div class="avatar ${cls}">${esc((p?.username || '?')[0])}</div>`;
 }
+const isVerified = p => !!(p && (p.is_admin || p.verified || (p.sub_count || 0) >= 10));
+function badge(p) {
+  if (!isVerified(p)) return '';
+  return `<svg class="vbadge" viewBox="0 0 24 24" role="img" aria-label="Verified"><title>Verified</title><path d="M12 1.8l2.6 1.9 3.2-.1 1 3 2.6 1.9-1 3 1 3-2.6 1.9-1 3-3.2-.1L12 22.2l-2.6-1.9-3.2.1-1-3-2.6-1.9 1-3-1-3 2.6-1.9 1-3 3.2.1z"/><path class="tick" d="m8.3 12.2 2.6 2.6 4.8-5.2"/></svg>`;
+}
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
@@ -54,7 +59,7 @@ function requireAuth(msg = 'Log in to do that') {
   return false;
 }
 
-const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,is_short,profiles!videos_user_id_fkey(id,username,avatar_url)';
+const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,is_short,profiles!videos_user_id_fkey(id,username,avatar_url,is_admin,verified,sub_count)';
 
 function thumbHTML(v) {
   return `<div class="thumb">${v.thumbnail_url
@@ -69,7 +74,7 @@ function cardHTML(v) {
       <a href="#/channel/${p.id}">${avatar(p)}</a>
       <div>
         <a href="#/watch/${v.id}"><h3>${esc(v.title)}</h3></a>
-        <p><a href="#/channel/${p.id}">${esc(p.username || 'Unknown')}</a></p>
+        <p><a href="#/channel/${p.id}">${esc(p.username || 'Unknown')}</a>${badge(p)}</p>
         <p>${fmtNum(v.views)} views • ${timeAgo(v.created_at)}</p>
       </div>
     </div>
@@ -82,7 +87,7 @@ function rowHTML(v, compact = false) {
     <div>
       <h3>${esc(v.title)}</h3>
       <p>${fmtNum(v.views)} views • ${timeAgo(v.created_at)}</p>
-      <p>${esc(p.username || '')}</p>
+      <p>${esc(p.username || '')}${badge(p)}</p>
       ${compact ? '' : `<p class="desc">${esc(v.description || '')}</p>`}
     </div>
   </a>`;
@@ -116,9 +121,10 @@ function renderAuthArea() {
     <div class="user-menu">
       <button id="avatarBtn" aria-label="Account">${avatar(profile)}</button>
       <div class="dropdown" id="userDrop" hidden>
-        <div class="who"><b>${esc(profile?.username || 'You')}</b><small>@${esc(profile?.username || '')}</small></div>
+        <div class="who"><b>${esc(profile?.username || 'You')}${badge(profile)}</b><small>@${esc(profile?.username || '')}</small></div>
         <a href="#/me"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Your channel</a>
         <a href="#/upload"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-5 5m5-5 5 5M4 20h16"/></svg>Upload video</a>
+        ${isAdmin() ? `<a href="#/admin"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>Admin panel</a>` : ''}
         <a href="#/settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
         <button id="logoutBtn"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Log out</button>
       </div>
@@ -285,6 +291,7 @@ async function pageWatch(id) {
   let likeCount = likesRes.count || 0, liked = !!myLike.data;
   let subCount = subsRes.count || 0, subbed = !!mySub.data;
   const isOwner = session?.user.id === v.user_id;
+  const canMod = isOwner || isAdmin();
 
   view.innerHTML = `
   <div class="watch">
@@ -294,7 +301,7 @@ async function pageWatch(id) {
       <div class="watch-bar">
         <div class="channel-chip">
           <a href="#/channel/${p.id}">${avatar(p)}</a>
-          <div><a href="#/channel/${p.id}"><b>${esc(p.username || 'Unknown')}</b></a><small id="subCount">${fmtNum(subCount)} subscribers</small></div>
+          <div><a href="#/channel/${p.id}"><b>${esc(p.username || 'Unknown')}</b>${badge(p)}</a><small id="subCount">${fmtNum(subCount)} subscribers</small></div>
           ${isOwner ? '' : `<button class="btn ${subbed ? 'subbed' : 'primary'}" id="subBtn">${subbed ? 'Subscribed' : 'Subscribe'}</button>`}
         </div>
         <div class="actions">
@@ -303,7 +310,7 @@ async function pageWatch(id) {
             <span id="likeCount">${fmtNum(likeCount)}</span>
           </button>
           <button class="btn" id="shareBtn"><svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/></svg>Share</button>
-          ${isOwner ? `<button class="btn" id="delVid" style="color:var(--danger)"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Delete</button>` : ''}
+          ${canMod ? `<button class="btn" id="delVid" style="color:var(--danger)"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Delete</button>` : ''}
         </div>
       </div>
       <div class="desc-box">
@@ -380,16 +387,16 @@ async function pageWatch(id) {
 
   // comments
   const loadComments = async () => {
-    const { data } = await sb.from('comments').select('id,body,created_at,user_id,profiles!comments_user_id_fkey(id,username,avatar_url)')
+    const { data } = await sb.from('comments').select('id,body,created_at,user_id,profiles!comments_user_id_fkey(id,username,avatar_url,is_admin,verified,sub_count)')
       .eq('video_id', id).order('created_at', { ascending: false }).limit(200);
     $('#cCount').textContent = `${fmtNum(data?.length || 0)} Comments`;
     $('#cList').innerHTML = (data || []).map(c => `
       <div class="comment">
         <a href="#/channel/${c.profiles?.id}">${avatar(c.profiles, 'sm')}</a>
         <div>
-          <div class="head"><b>@${esc(c.profiles?.username || 'user')}</b><span>${timeAgo(c.created_at)}</span></div>
+          <div class="head"><b>@${esc(c.profiles?.username || 'user')}</b>${badge(c.profiles)}<span>${timeAgo(c.created_at)}</span></div>
           <p>${linkify(c.body)}</p>
-          ${session?.user.id === c.user_id || isOwner ? `<button class="del" data-del="${c.id}">Delete</button>` : ''}
+          ${session?.user.id === c.user_id || canMod ? `<button class="del" data-del="${c.id}">Delete</button>` : ''}
         </div>
       </div>`).join('') || '<p class="hint">No comments yet. Start the conversation!</p>';
     $$('[data-del]').forEach(b => (b.onclick = async () => {
@@ -435,7 +442,7 @@ async function pageChannel(id, tab = 'videos') {
     <div class="channel-head">
       ${avatar(p, 'lg')}
       <div style="flex:1">
-        <h1>${esc(p.username)}</h1>
+        <h1>${esc(p.username)}${badge(p)}${p.is_admin ? '<span class="tag">Admin</span>' : ''}</h1>
         <p>@${esc(p.username)} • <span id="chSubs">${fmtNum(subCount)}</span> subscribers • ${longs.length} videos • ${fmtNum(totalViews)} views</p>
         ${p.bio ? `<p>${esc(p.bio)}</p>` : ''}
       </div>
@@ -512,6 +519,7 @@ function videoMeta(file) {
 function pageUpload(mode = 'video') {
   setActive('upload');
   if (!['video', 'short', 'pictures'].includes(mode)) mode = 'video';
+  if (profile?.banned) { view.innerHTML = empty('Your account is banned', 'You can’t upload, post or comment.'); return; }
   if (!session) {
     view.innerHTML = empty('Upload to Orange Tube', 'You need an account to upload.', `<button class="btn primary" id="si">Log in / Sign up</button>`);
     $('#si').onclick = () => openAuth('login');
@@ -808,7 +816,7 @@ async function pageShorts(startId) {
         <video src="${esc(v.video_url)}" ${v.thumbnail_url ? `poster="${esc(v.thumbnail_url)}"` : ''} loop playsinline preload="metadata"></video>
         <button class="short-mute icon-btn" aria-label="Sound">${shortsMuted ? ICON.mute : ICON.sound}</button>
         <div class="short-info">
-          <a href="#/channel/${p.id}" class="short-ch">${avatar(p, 'sm')}<b>@${esc(p.username || 'user')}</b></a>
+          <a href="#/channel/${p.id}" class="short-ch">${avatar(p, 'sm')}<b>@${esc(p.username || 'user')}</b>${badge(p)}</a>
           <p>${esc(v.title)}</p>
         </div>
       </div>
@@ -870,7 +878,7 @@ async function shareLink(url, title = 'Orange Tube') {
 }
 
 // ================= PICTURE POSTS =================
-const POST_SELECT = 'id,caption,images,created_at,user_id,profiles!posts_user_id_fkey(id,username,avatar_url)';
+const POST_SELECT = 'id,caption,images,created_at,user_id,profiles!posts_user_id_fkey(id,username,avatar_url,is_admin,verified,sub_count)';
 
 function carouselHTML(images) {
   const n = images.length;
@@ -914,11 +922,11 @@ function wireCarousels(root = document) {
 
 function postHTML(p, likes, liked) {
   const u = p.profiles || {};
-  const mine = session?.user.id === p.user_id;
+  const mine = session?.user.id === p.user_id || isAdmin();
   return `<article class="post" data-id="${p.id}">
     <header class="post-head">
       <a href="#/channel/${u.id}">${avatar(u)}</a>
-      <div><a href="#/channel/${u.id}"><b>${esc(u.username || 'user')}</b></a><small>${timeAgo(p.created_at)}</small></div>
+      <div><a href="#/channel/${u.id}"><b>${esc(u.username || 'user')}</b>${badge(u)}</a><small>${timeAgo(p.created_at)}</small></div>
       ${mine ? `<button class="icon-btn post-del" aria-label="Delete post" style="margin-left:auto">${ICON.trash}</button>` : ''}
     </header>
     ${p.caption ? `<p class="post-cap">${linkify(p.caption)}</p>` : ''}
@@ -985,8 +993,137 @@ async function pagePosts() {
   renderPosts($('#postList'), data);
 }
 
+// ================= ADMIN PANEL =================
+const isAdmin = () => !!profile?.is_admin;
+
+async function pageAdmin(tab = 'users') {
+  setActive('admin');
+  if (!isAdmin()) { view.innerHTML = empty('Admins only', 'You don’t have access to this page.'); return; }
+  view.innerHTML = `
+    <h1 class="page-title">Admin panel</h1>
+    <div class="stat-row" id="stats">${['Users', 'Videos', 'Shorts', 'Pictures', 'Comments'].map(n => `<div class="stat"><b>–</b><span>${n}</span></div>`).join('')}</div>
+    <nav class="ch-tabs">
+      <a href="#/admin/users" class="${tab === 'users' ? 'on' : ''}">Users</a>
+      <a href="#/admin/videos" class="${tab === 'videos' ? 'on' : ''}">Videos & Shorts</a>
+      <a href="#/admin/posts" class="${tab === 'posts' ? 'on' : ''}">Pictures</a>
+    </nav>
+    <div id="adminBody"><div class="spinner"></div></div>`;
+
+  const head = { count: 'exact', head: true };
+  Promise.all([
+    sb.from('profiles').select('*', head),
+    sb.from('videos').select('*', head).eq('is_short', false),
+    sb.from('videos').select('*', head).eq('is_short', true),
+    sb.from('posts').select('*', head),
+    sb.from('comments').select('*', head),
+  ]).then(rs => $$('#stats .stat b').forEach((b, i) => (b.textContent = fmtNum(rs[i].count || 0))));
+
+  const body = $('#adminBody');
+  if (tab === 'videos') return adminVideos(body);
+  if (tab === 'posts') return adminPosts(body);
+  return adminUsers(body);
+}
+
+async function adminUsers(body) {
+  body.innerHTML = `
+    <form class="search admin-search" id="uSearch"><input type="search" name="q" placeholder="Search users" autocomplete="off"><button type="submit" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button></form>
+    <div id="uList"><div class="spinner"></div></div>`;
+  const load = async (q = '') => {
+    let query = sb.from('profiles').select('id,username,avatar_url,is_admin,verified,banned,sub_count,created_at').order('created_at', { ascending: false }).limit(100);
+    if (q) query = query.ilike('username', `%${q.replace(/[%,()]/g, '')}%`);
+    const { data, error } = await query;
+    if (error) return showDbError(error);
+    const list = $('#uList');
+    list.innerHTML = data?.length ? `<div class="admin-list">${data.map(u => `
+      <div class="admin-row" data-id="${u.id}">
+        <a href="#/channel/${u.id}">${avatar(u)}</a>
+        <div class="ar-main">
+          <a href="#/channel/${u.id}"><b>${esc(u.username)}</b>${badge(u)}</a>
+          <small>${fmtNum(u.sub_count)} subscribers • joined ${timeAgo(u.created_at)}
+            ${u.is_admin ? '<span class="tag">Admin</span>' : ''}${u.banned ? '<span class="tag red">Banned</span>' : ''}</small>
+        </div>
+        <div class="ar-actions">
+          <button class="btn sm" data-act="verified" data-val="${!u.verified}">${u.verified ? 'Unverify' : 'Verify'}</button>
+          ${u.id === session.user.id ? '' : `
+          <button class="btn sm" data-act="admin" data-val="${!u.is_admin}">${u.is_admin ? 'Remove admin' : 'Make admin'}</button>
+          <button class="btn sm ${u.banned ? '' : 'danger'}" data-act="banned" data-val="${!u.banned}">${u.banned ? 'Unban' : 'Ban'}</button>`}
+        </div>
+      </div>`).join('')}</div>` : empty('No users found');
+    $$('[data-act]', list).forEach(b => (b.onclick = async () => {
+      const id = b.closest('.admin-row').dataset.id, act = b.dataset.act, val = b.dataset.val === 'true';
+      if (act === 'banned' && val && !confirm('Ban this user? They won’t be able to upload, post or comment.')) return;
+      if (act === 'admin' && val && !confirm('Give this user full admin powers?')) return;
+      b.disabled = true;
+      const args = { target: id, p_verified: null, p_admin: null, p_banned: null };
+      args['p_' + act] = val;
+      const { error } = await sb.rpc('admin_set_user', args);
+      if (error) { b.disabled = false; return toast(error.message); }
+      toast('Updated');
+      load($('#uSearch').q.value.trim());
+    }));
+  };
+  $('#uSearch').onsubmit = e => { e.preventDefault(); load(e.target.q.value.trim()); };
+  load();
+}
+
+async function adminDeleteVideo(v) {
+  const { error } = await sb.from('videos').delete().eq('id', v.id);
+  if (error) return toast(error.message), false;
+  for (const u of [v.video_url, v.thumbnail_url].filter(Boolean)) {
+    const m = u.match(/\/object\/public\/(videos|thumbnails)\/(.+)$/);
+    if (m) await sb.storage.from(m[1]).remove([decodeURIComponent(m[2])]);
+  }
+  return true;
+}
+
+async function adminVideos(body) {
+  const { data, error } = await sb.from('videos').select(VIDEO_SELECT).order('created_at', { ascending: false }).limit(100);
+  if (error) return showDbError(error);
+  body.innerHTML = data?.length ? `<div class="admin-list">${data.map(v => `
+    <div class="admin-row" data-id="${v.id}">
+      <a href="${v.is_short ? '#/shorts/' : '#/watch/'}${v.id}" class="ar-thumb ${v.is_short ? 'short' : ''}">${v.thumbnail_url ? `<img src="${esc(v.thumbnail_url)}" alt="" loading="lazy">` : ''}</a>
+      <div class="ar-main">
+        <a href="${v.is_short ? '#/shorts/' : '#/watch/'}${v.id}"><b>${esc(v.title)}</b></a>
+        <small>${v.is_short ? '<span class="tag">Short</span>' : ''}by ${esc(v.profiles?.username || '?')} • ${fmtNum(v.views)} views • ${timeAgo(v.created_at)}</small>
+      </div>
+      <div class="ar-actions"><button class="btn sm danger" data-del>Delete</button></div>
+    </div>`).join('')}</div>` : empty('No videos yet');
+  $$('[data-del]', body).forEach(b => (b.onclick = async () => {
+    const row = b.closest('.admin-row'), v = data.find(x => x.id === row.dataset.id);
+    if (!confirm(`Delete "${v.title}"?`)) return;
+    b.disabled = true;
+    if (await adminDeleteVideo(v)) { row.remove(); toast('Deleted'); } else b.disabled = false;
+  }));
+}
+
+async function adminPosts(body) {
+  const { data, error } = await sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(100);
+  if (error) return showDbError(error);
+  body.innerHTML = data?.length ? `<div class="admin-list">${data.map(p => `
+    <div class="admin-row" data-id="${p.id}">
+      <a href="#/channel/${p.user_id}/posts" class="ar-thumb"><img src="${esc(p.images?.[0] || '')}" alt="" loading="lazy"></a>
+      <div class="ar-main">
+        <b>${esc((p.caption || '(no caption)').slice(0, 80))}</b>
+        <small>by ${esc(p.profiles?.username || '?')} • ${p.images?.length || 0} pictures • ${timeAgo(p.created_at)}</small>
+      </div>
+      <div class="ar-actions"><button class="btn sm danger" data-del>Delete</button></div>
+    </div>`).join('')}</div>` : empty('No pictures yet');
+  $$('[data-del]', body).forEach(b => (b.onclick = async () => {
+    const row = b.closest('.admin-row'), p = data.find(x => x.id === row.dataset.id);
+    if (!confirm('Delete this post?')) return;
+    b.disabled = true;
+    const { error } = await sb.from('posts').delete().eq('id', p.id);
+    if (error) { b.disabled = false; return toast(error.message); }
+    const paths = (p.images || []).map(u => u.match(/\/object\/public\/posts\/(.+)$/)?.[1]).filter(Boolean).map(decodeURIComponent);
+    if (paths.length) await sb.storage.from('posts').remove(paths);
+    row.remove();
+    toast('Deleted');
+  }));
+}
+
 // ================= router =================
 function setActive(name) {
+  const al = $('#adminLink'); if (al) al.hidden = !isAdmin();
   $$('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.nav === name));
 }
 
@@ -1013,6 +1150,7 @@ async function router() {
     case 'shorts': return pageShorts(arg);
     case 'posts': return pagePosts();
     case 'settings': return pageSettings();
+    case 'admin': return pageAdmin(arg || 'users');
     case 'search': return pageSearch(arg);
     default: view.innerHTML = empty('Page not found', '', '<a class="btn primary" href="#/">Go home</a>');
   }
