@@ -54,7 +54,7 @@ function requireAuth(msg = 'Log in to do that') {
   return false;
 }
 
-const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,profiles(id,username,avatar_url)';
+const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,profiles!videos_user_id_fkey(id,username,avatar_url)';
 
 function thumbHTML(v) {
   return `<div class="thumb">${v.thumbnail_url
@@ -372,7 +372,7 @@ async function pageWatch(id) {
 
   // comments
   const loadComments = async () => {
-    const { data } = await sb.from('comments').select('id,body,created_at,user_id,profiles(id,username,avatar_url)')
+    const { data } = await sb.from('comments').select('id,body,created_at,user_id,profiles!comments_user_id_fkey(id,username,avatar_url)')
       .eq('video_id', id).order('created_at', { ascending: false }).limit(200);
     $('#cCount').textContent = `${fmtNum(data?.length || 0)} Comments`;
     $('#cList').innerHTML = (data || []).map(c => `
@@ -614,7 +614,7 @@ function pageSettings() {
 
 function showDbError(error) {
   console.error(error);
-  const missing = /relation|does not exist|schema cache/i.test(error.message);
+  const missing = /relation "?[\w.]+"? does not exist|Could not find the table/i.test(error.message);
   view.innerHTML = empty('Something went wrong', missing
     ? 'The database tables aren’t set up yet. Run <code>supabase/schema.sql</code> in your Supabase SQL Editor.'
     : esc(error.message));
