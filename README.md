@@ -3,7 +3,7 @@
 A video-sharing site with an orange theme: upload, watch, like, comment, subscribe. It runs as a static site with no build step. Supabase handles auth, the database and file storage.
 
 ## Features
-- **Log in / Sign up** with email and password, plus password reset. A channel is created automatically on sign-up.
+- **Log in / Sign up** with just a channel name and password (no email). Turn off *Confirm email* in Supabase for this.
 - **Upload** with drag & drop. A thumbnail is grabbed from the video automatically, or you can upload your own.
 - **Watch page** with a player, view counter, likes, subscribe, share, comments and recommended videos.
 - **Home**, **Trending**, **Subscriptions**, **Liked videos** and **Search**.

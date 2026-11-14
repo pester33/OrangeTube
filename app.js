@@ -92,6 +92,13 @@ function gridOf(videos, emptyHTML) {
 }
 
 // ================= auth UI =================
+// Accounts use channel name + password. Supabase needs an email internally,
+// so we derive a hidden one from the channel name (no emails are ever sent).
+const AUTH_DOMAIN = 'orangetube.app';
+const nameToEmail = name => {
+  name = name.trim();
+  return name.includes('@') ? name : `${name.toLowerCase()}@${AUTH_DOMAIN}`;
+};
 function renderAuthArea() {
   const area = $('#authArea');
   if (!session) {
@@ -109,7 +116,7 @@ function renderAuthArea() {
     <div class="user-menu">
       <button id="avatarBtn" aria-label="Account">${avatar(profile)}</button>
       <div class="dropdown" id="userDrop" hidden>
-        <div class="who"><b>${esc(profile?.username || 'You')}</b><small>${esc(session.user.email)}</small></div>
+        <div class="who"><b>${esc(profile?.username || 'You')}</b><small>@${esc(profile?.username || '')}</small></div>
         <a href="#/me"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Your channel</a>
         <a href="#/upload"><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-5 5m5-5 5 5M4 20h16"/></svg>Upload video</a>
         <a href="#/settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
@@ -152,7 +159,8 @@ $('#loginForm').onsubmit = async e => {
   const f = new FormData(e.target);
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; setAuthMsg('Logging in…');
-  const { error } = await sb.auth.signInWithPassword({ email: f.get('email'), password: f.get('password') });
+  const { error } = await sb.auth.signInWithPassword({ email: nameToEmail(f.get('username')), password: f.get('password') });
+  if (error && /invalid login/i.test(error.message)) { btn.disabled = false; return setAuthMsg('Wrong channel name or password', 'err'); }
   btn.disabled = false;
   if (error) return setAuthMsg(error.message, 'err');
   e.target.reset();
@@ -168,33 +176,25 @@ $('#signupForm').onsubmit = async e => {
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true; setAuthMsg('Creating your channel…');
 
-  const { data: taken } = await sb.from('profiles').select('id').eq('username', username).maybeSingle();
+  const { data: taken } = await sb.from('profiles').select('id').ilike('username', username).maybeSingle();
   if (taken) { btn.disabled = false; return setAuthMsg('That channel name is taken', 'err'); }
 
   const { data, error } = await sb.auth.signUp({
-    email: f.get('email'),
+    email: nameToEmail(username),
     password: f.get('password'),
-    options: { data: { username }, emailRedirectTo: location.origin + location.pathname },
+    options: { data: { username } },
   });
   btn.disabled = false;
-  if (error) return setAuthMsg(error.message, 'err');
+  if (error) return setAuthMsg(/already registered/i.test(error.message) ? 'That channel name is taken' : error.message, 'err');
   e.target.reset();
   if (data.session) {
     closeAuth();
     toast(`Channel created — welcome, ${username}! 🍊`);
   } else {
-    setAuthMsg('Check your email to confirm your account, then log in.', 'ok');
-    setTimeout(() => switchTab('login'), 50);
-    setTimeout(() => setAuthMsg('Check your email to confirm your account, then log in.', 'ok'), 60);
+    setAuthMsg('Account made, but Supabase still wants email confirmation. Turn off "Confirm email" in Supabase → Authentication → Sign In / Providers → Email.', 'err');
   }
 };
 
-$('#forgotBtn').onclick = async () => {
-  const email = $('#loginForm').email.value.trim();
-  if (!email) return setAuthMsg('Type your email above first', 'err');
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname + '#/settings' });
-  setAuthMsg(error ? error.message : 'Password reset email sent.', error ? 'err' : 'ok');
-};
 
 async function loadProfile() {
   if (!session) { profile = null; return; }
@@ -582,7 +582,7 @@ function pageSettings() {
       <form class="form" id="setForm">
         <div style="display:flex;align-items:center;gap:16px">${avatar(profile, 'lg')}
           <label style="flex:1">Profile picture<input type="file" name="avatar" accept="image/*"></label></div>
-        <label>Channel name<input type="text" name="username" value="${esc(profile?.username || '')}" minlength="3" maxlength="30" pattern="[A-Za-z0-9_\\.]+" required></label>
+        <label>Channel name<input type="text" name="username" value="${esc(profile?.username || '')}" readonly style="opacity:.6"><span class="hint">Your channel name is also your login, so it can't be changed.</span></label>
         <label>About<textarea name="bio" maxlength="500">${esc(profile?.bio || '')}</textarea></label>
         <label>New password (leave blank to keep)<input type="text" name="password" minlength="6" autocomplete="new-password" style="-webkit-text-security:disc"></label>
         <button class="btn primary block" type="submit">Save changes</button>
@@ -591,7 +591,7 @@ function pageSettings() {
   $('#setForm').onsubmit = async e => {
     e.preventDefault();
     const f = e.target, uid = session.user.id;
-    const updates = { username: f.username.value.trim(), bio: f.bio.value.trim() };
+    const updates = { bio: f.bio.value.trim() };
     const file = f.avatar.files[0];
     if (file) {
       const path = `${uid}/avatar-${Date.now()}`;

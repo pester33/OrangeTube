@@ -66,15 +66,13 @@
       </div>
 
       <form id="loginForm" class="auth-form">
-        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
+        <label>Channel name<input type="text" name="username" required autocomplete="username" autocapitalize="off" spellcheck="false" /></label>
         <label>Password<input type="password" name="password" required minlength="6" autocomplete="current-password" /></label>
         <button class="btn primary block" type="submit">Log in</button>
-        <button class="link-btn" type="button" id="forgotBtn">Forgot password?</button>
       </form>
 
       <form id="signupForm" class="auth-form" hidden>
-        <label>Channel name<input type="text" name="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_\.]+" title="Letters, numbers, _ and . only" /></label>
-        <label>Email<input type="email" name="email" required autocomplete="email" /></label>
+        <label>Channel name<input type="text" name="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9_\.]+" title="Letters, numbers, _ and . only" autocapitalize="off" spellcheck="false" autocomplete="username" /></label>
         <label>Password<input type="password" name="password" required minlength="6" autocomplete="new-password" /></label>
         <label>Confirm password<input type="password" name="confirm" required minlength="6" autocomplete="new-password" /></label>
         <button class="btn primary block" type="submit">Create account</button>
