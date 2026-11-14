@@ -248,3 +248,78 @@ body.side-collapsed .view { margin-left: 0; }
   .row .thumb { max-width: 42%; }
   .grid { grid-template-columns: 1fr; }
 }
+
+/* ===== Shorts shelf / grid ===== */
+.shelf { margin-bottom: 30px; }
+.shelf-row { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x proximity; }
+.short-card { flex: 0 0 190px; scroll-snap-align: start; }
+.short-card .sthumb { position: relative; aspect-ratio: 9/16; border-radius: var(--radius); overflow: hidden; background: linear-gradient(135deg, #3a240f, #20150b); }
+.short-card .sthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.short-card .sthumb .ph { position: absolute; inset: 0; display: grid; place-items: center; }
+.short-card .sthumb .ph img { width: 48px; height: 48px; opacity: .6; }
+.short-card h3 { font-size: .95rem; margin: 8px 0 2px; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.short-card p { margin: 0; color: var(--muted); font-size: .85rem; }
+.shorts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+.shorts-grid .short-card { flex: none; }
+
+/* ===== Shorts feed (vertical swipe) ===== */
+.view.flush { padding: 0; }
+.shorts-feed { height: calc(100vh - var(--topbar)); height: calc(100dvh - var(--topbar)); overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; }
+.shorts-feed::-webkit-scrollbar { display: none; }
+.short { height: 100%; scroll-snap-align: start; scroll-snap-stop: always; display: flex; justify-content: center; align-items: flex-end; gap: 14px; padding: 16px 0; }
+.short-stage { position: relative; height: 100%; aspect-ratio: 9/16; max-width: 100vw; border-radius: 16px; overflow: hidden; background: #000; }
+.short-stage video { width: 100%; height: 100%; object-fit: cover; display: block; cursor: pointer; }
+.short-mute { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.45); color: #fff; }
+.short-info { position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 16px 18px; background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #fff; pointer-events: none; }
+.short-info a { pointer-events: auto; }
+.short-ch { display: inline-flex; align-items: center; gap: 8px; }
+.short-info p { margin: 8px 0 0; line-height: 1.35; }
+.short-actions { display: flex; flex-direction: column; gap: 16px; padding-bottom: 8px; }
+.sa { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; }
+.sa .ic { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-2); transition: .15s; }
+.sa:hover .ic { background: var(--line); }
+.sa.on .ic { background: var(--orange); color: #1a0d00; }
+.sa small { font-size: .78rem; color: var(--text); }
+@media (max-width: 640px) {
+  .short { padding: 0; }
+  .short-stage { border-radius: 0; width: 100%; aspect-ratio: auto; }
+  .short-actions { position: absolute; right: 8px; bottom: 90px; }
+  .short { position: relative; }
+  .sa .ic { background: rgba(0,0,0,.45); color: #fff; }
+  .sa small { color: #fff; }
+}
+
+/* ===== Picture posts + swipe carousel ===== */
+.posts-wrap { max-width: 620px; margin: 0 auto; }
+.posts { display: flex; flex-direction: column; gap: 22px; }
+.post { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; position: relative; }
+.post-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.post-head b { display: block; }
+.post-head small { color: var(--muted); font-size: .82rem; }
+.post-cap { margin: 0; padding: 0 14px 12px; white-space: pre-wrap; line-height: 1.45; }
+.post-foot { display: flex; gap: 8px; padding: 12px 14px; }
+.carousel { position: relative; background: #000; }
+.track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; aspect-ratio: 1; user-select: none; }
+.track::-webkit-scrollbar { display: none; }
+.track.drag { scroll-snap-type: none; cursor: grabbing; }
+.track img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: contain; scroll-snap-align: center; }
+.cz { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #1a0d00; font-size: 1.4rem; line-height: 1; display: grid; place-items: center; }
+.cz.prev { left: 10px; } .cz.next { right: 10px; }
+.cz-count { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,.6); color: #fff; font-size: .8rem; padding: 3px 9px; border-radius: 99px; }
+.dots { position: absolute; bottom: 10px; left: 0; right: 0; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.45); transition: .2s; }
+.dots i.on { background: var(--orange); width: 18px; border-radius: 4px; }
+.post.pop .carousel::after { content: '🧡'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 90px; animation: pop .6s ease forwards; pointer-events: none; }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+
+.pic-thumbs { display: flex; gap: 10px; flex-wrap: wrap; }
+.pic-thumb { position: relative; width: 96px; height: 96px; border-radius: 10px; overflow: hidden; }
+.pic-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pic-thumb button { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.7); color: #fff; font-size: .7rem; }
+.preview-row.vertical video, .preview-row.vertical img { width: 160px; aspect-ratio: 9/16; }
+
+/* ===== Channel tabs ===== */
+.ch-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.ch-tabs a { padding: 10px 16px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; }
+.ch-tabs a.on { color: var(--text); border-bottom-color: var(--orange); }
+.ch-tabs a:hover { color: var(--text); }

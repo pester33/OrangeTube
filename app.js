@@ -54,7 +54,7 @@ function requireAuth(msg = 'Log in to do that') {
   return false;
 }
 
-const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,profiles!videos_user_id_fkey(id,username,avatar_url)';
+const VIDEO_SELECT = 'id,title,description,thumbnail_url,video_url,views,created_at,user_id,is_short,profiles!videos_user_id_fkey(id,username,avatar_url)';
 
 function thumbHTML(v) {
   return `<div class="thumb">${v.thumbnail_url
@@ -206,15 +206,23 @@ async function loadProfile() {
 async function pageHome() {
   setActive('home');
   skeletonGrid();
-  const { data, error } = await sb.from('videos').select(VIDEO_SELECT).order('created_at', { ascending: false }).limit(60);
-  if (error) return showDbError(error);
-  gridOf(data, empty('No videos yet', 'Be the first to upload something fresh.', `<a class="btn primary" href="#/upload">Upload a video</a>`));
+  const [vids, shorts] = await Promise.all([
+    sb.from('videos').select(VIDEO_SELECT).eq('is_short', false).order('created_at', { ascending: false }).limit(60),
+    sb.from('videos').select(VIDEO_SELECT).eq('is_short', true).order('created_at', { ascending: false }).limit(12),
+  ]);
+  if (vids.error) return showDbError(vids.error);
+  const s = shorts.data || [], v = vids.data || [];
+  if (!s.length && !v.length) {
+    view.innerHTML = empty('Nothing here yet', 'Be the first to upload something fresh.', `<a class="btn primary" href="#/upload">Upload</a>`);
+    return;
+  }
+  view.innerHTML = shortsShelfHTML(s) + (v.length ? `<div class="grid">${v.map(cardHTML).join('')}</div>` : '');
 }
 
 async function pageTrending() {
   setActive('trending');
   skeletonGrid();
-  const { data, error } = await sb.from('videos').select(VIDEO_SELECT).order('views', { ascending: false }).limit(60);
+  const { data, error } = await sb.from('videos').select(VIDEO_SELECT).eq('is_short', false).order('views', { ascending: false }).limit(60);
   if (error) return showDbError(error);
   view.innerHTML = `<h1 class="page-title">🔥 Trending</h1>`;
   view.insertAdjacentHTML('beforeend', data?.length ? `<div class="grid">${data.map(cardHTML).join('')}</div>` : empty('Nothing trending yet'));
@@ -271,7 +279,7 @@ async function pageWatch(id) {
     sb.from('subscriptions').select('*', { count: 'exact', head: true }).eq('channel_id', p.id),
     session ? sb.from('likes').select('video_id').eq('video_id', id).eq('user_id', session.user.id).maybeSingle() : { data: null },
     session ? sb.from('subscriptions').select('channel_id').eq('channel_id', p.id).eq('subscriber_id', session.user.id).maybeSingle() : { data: null },
-    sb.from('videos').select(VIDEO_SELECT).neq('id', id).order('views', { ascending: false }).limit(20),
+    sb.from('videos').select(VIDEO_SELECT).neq('id', id).eq('is_short', false).order('views', { ascending: false }).limit(20),
   ]);
 
   let likeCount = likesRes.count || 0, liked = !!myLike.data;
@@ -405,7 +413,7 @@ async function pageWatch(id) {
   };
 }
 
-async function pageChannel(id) {
+async function pageChannel(id, tab = 'videos') {
   setActive(session?.user.id === id ? 'me' : '');
   spinner();
   const { data: p } = await sb.from('profiles').select('*').eq('id', id).maybeSingle();
@@ -418,8 +426,9 @@ async function pageChannel(id) {
   ]);
   const isMe = session?.user.id === id;
   let subbed = !!mySub.data, subCount = subs.count || 0;
-  const list = vids.data || [];
-  const totalViews = list.reduce((a, v) => a + (v.views || 0), 0);
+  const all = vids.data || [];
+  const longs = all.filter(v => !v.is_short), shorts = all.filter(v => v.is_short);
+  const totalViews = all.reduce((a, v) => a + (v.views || 0), 0);
 
   view.innerHTML = `
     <div class="banner"></div>
@@ -427,14 +436,31 @@ async function pageChannel(id) {
       ${avatar(p, 'lg')}
       <div style="flex:1">
         <h1>${esc(p.username)}</h1>
-        <p>@${esc(p.username)} • <span id="chSubs">${fmtNum(subCount)}</span> subscribers • ${list.length} videos • ${fmtNum(totalViews)} views</p>
+        <p>@${esc(p.username)} • <span id="chSubs">${fmtNum(subCount)}</span> subscribers • ${longs.length} videos • ${fmtNum(totalViews)} views</p>
         ${p.bio ? `<p>${esc(p.bio)}</p>` : ''}
       </div>
       ${isMe ? `<a class="btn" href="#/settings">Customize channel</a><a class="btn primary" href="#/upload">Upload</a>`
              : `<button class="btn ${subbed ? 'subbed' : 'primary'}" id="chSub">${subbed ? 'Subscribed' : 'Subscribe'}</button>`}
     </div>
-    <h2 class="page-title">Videos</h2>
-    ${list.length ? `<div class="grid">${list.map(cardHTML).join('')}</div>` : empty('No videos yet', isMe ? 'Upload your first video!' : '')}`;
+    <nav class="ch-tabs">
+      <a href="#/channel/${id}/videos" class="${tab === 'videos' ? 'on' : ''}">Videos</a>
+      <a href="#/channel/${id}/shorts" class="${tab === 'shorts' ? 'on' : ''}">Shorts</a>
+      <a href="#/channel/${id}/posts" class="${tab === 'posts' ? 'on' : ''}">Pictures</a>
+    </nav>
+    <div id="chBody"></div>`;
+
+  const body = $('#chBody');
+  if (tab === 'shorts') {
+    body.innerHTML = shorts.length ? `<div class="shorts-grid">${shorts.map(shortCardHTML).join('')}</div>` : empty('No Shorts yet', isMe ? 'Upload your first Short!' : '');
+  } else if (tab === 'posts') {
+    body.innerHTML = '<div class="spinner"></div>';
+    const { data: posts } = await sb.from('posts').select(POST_SELECT).eq('user_id', id).order('created_at', { ascending: false });
+    body.innerHTML = '<div class="posts-wrap"><div id="chPosts"></div></div>';
+    if (posts?.length) renderPosts($('#chPosts'), posts);
+    else $('#chPosts').innerHTML = empty('No pictures yet', '', isMe ? `<a class="btn primary" href="#/upload/pictures">Post pictures</a>` : '');
+  } else {
+    body.innerHTML = longs.length ? `<div class="grid">${longs.map(cardHTML).join('')}</div>` : empty('No videos yet', isMe ? 'Upload your first video!' : '');
+  }
 
   const b = $('#chSub');
   if (b) b.onclick = async () => {
@@ -473,33 +499,54 @@ function grabFrame(file) {
   });
 }
 
-function pageUpload() {
+function videoMeta(file) {
+  return new Promise(resolve => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.src = URL.createObjectURL(file);
+    v.onloadedmetadata = () => { resolve({ w: v.videoWidth, h: v.videoHeight, d: v.duration }); URL.revokeObjectURL(v.src); };
+    v.onerror = () => resolve(null);
+  });
+}
+
+function pageUpload(mode = 'video') {
   setActive('upload');
+  if (!['video', 'short', 'pictures'].includes(mode)) mode = 'video';
   if (!session) {
-    view.innerHTML = empty('Upload to Orange Tube', 'You need an account to upload videos.', `<button class="btn primary" id="si">Log in / Sign up</button>`);
+    view.innerHTML = empty('Upload to Orange Tube', 'You need an account to upload.', `<button class="btn primary" id="si">Log in / Sign up</button>`);
     $('#si').onclick = () => openAuth('login');
     return;
   }
+  const modes = `<div class="chips">
+    <a class="chip ${mode === 'video' ? 'active' : ''}" href="#/upload/video">🎬 Video</a>
+    <a class="chip ${mode === 'short' ? 'active' : ''}" href="#/upload/short">📱 Short</a>
+    <a class="chip ${mode === 'pictures' ? 'active' : ''}" href="#/upload/pictures">🖼️ Pictures</a>
+  </div>`;
+  if (mode === 'pictures') return uploadPictures(modes);
+
+  const isShort = mode === 'short';
   view.innerHTML = `
-    <h1 class="page-title">Upload video</h1>
+    <h1 class="page-title">${isShort ? 'Upload a Short' : 'Upload video'}</h1>
+    ${modes}
     <div class="panel">
       <form class="form" id="upForm">
         <label class="drop" id="drop">
           <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-5 5m5-5 5 5M4 20h16"/></svg>
-          <div><b id="dropText">Drag & drop a video, or click to choose</b></div>
-          <p>MP4, WebM or MOV • up to ${MAX_UPLOAD_MB} MB</p>
+          <div><b id="dropText">Drag & drop a ${isShort ? 'vertical video' : 'video'}, or click to choose</b></div>
+          <p>${isShort ? 'Vertical (9:16), up to 3 minutes' : 'MP4, WebM or MOV'} • up to ${MAX_UPLOAD_MB} MB</p>
           <input type="file" name="video" accept="video/*" required>
         </label>
-        <div class="preview-row" id="previews" hidden>
+        <div class="preview-row ${isShort ? 'vertical' : ''}" id="previews" hidden>
           <div><p class="hint">Video</p><video id="vPrev" controls muted></video></div>
           <div><p class="hint">Thumbnail</p><img id="tPrev" alt=""></div>
         </div>
-        <label>Title<input type="text" name="title" maxlength="120" required placeholder="Give your video a title"></label>
-        <label>Description<textarea name="description" maxlength="5000" placeholder="Tell viewers about your video"></textarea></label>
+        <p class="hint" id="shortHint"></p>
+        <label>Title<input type="text" name="title" maxlength="120" required placeholder="${isShort ? 'Caption your Short' : 'Give your video a title'}"></label>
+        ${isShort ? '' : `<label>Description<textarea name="description" maxlength="5000" placeholder="Tell viewers about your video"></textarea></label>`}
         <label>Custom thumbnail (optional — otherwise we grab a frame)<input type="file" name="thumb" accept="image/*"></label>
         <div class="progress" hidden id="prog"><div></div></div>
         <p class="hint" id="upStatus"></p>
-        <button class="btn primary block" type="submit" id="upBtn">Publish</button>
+        <button class="btn primary block" type="submit" id="upBtn">Publish${isShort ? ' Short' : ''}</button>
       </form>
     </div>`;
 
@@ -512,6 +559,11 @@ function pageUpload() {
     $('#previews').hidden = false;
     $('#vPrev').src = URL.createObjectURL(file);
     if (!form.title.value) form.title.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+    const m = await videoMeta(file);
+    const hint = $('#shortHint');
+    hint.textContent = '';
+    if (m && isShort && (m.w > m.h || m.d > 180)) hint.textContent = '⚠️ Shorts work best vertical and under 3 minutes. This one will still upload.';
+    if (m && !isShort && m.h > m.w && m.d <= 180) hint.innerHTML = '💡 This looks like a Short. <a href="#/upload/short" style="color:var(--orange-2)">Upload it as a Short instead</a>';
     if (!form.thumb.files[0]) {
       autoThumb = await grabFrame(file);
       if (autoThumb) $('#tPrev').src = URL.createObjectURL(autoThumb);
@@ -536,16 +588,14 @@ function pageUpload() {
     }
     const btn = $('#upBtn'), status = $('#upStatus'), prog = $('#prog'), bar = prog.firstElementChild;
     btn.disabled = true; prog.hidden = false; bar.style.width = '5%';
-    const uid = session.user.id;
-    const stamp = Date.now();
+    const uid = session.user.id, stamp = Date.now();
     const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-
     try {
       status.textContent = 'Uploading video… (large files can take a while)';
       let pct = 5;
       const tick = setInterval(() => { pct = Math.min(85, pct + 2); bar.style.width = pct + '%'; }, 600);
       const vPath = `${uid}/${stamp}.${ext}`;
-      const { error: vErr } = await sb.storage.from('videos').upload(vPath, file, { contentType: file.type || 'video/mp4', upsert: false });
+      const { error: vErr } = await sb.storage.from('videos').upload(vPath, file, { contentType: file.type || 'video/mp4' });
       clearInterval(tick);
       if (vErr) throw vErr;
       bar.style.width = '88%';
@@ -562,16 +612,89 @@ function pageUpload() {
       bar.style.width = '95%';
       status.textContent = 'Publishing…';
       const { data, error } = await sb.from('videos').insert({
-        user_id: uid, title: form.title.value.trim(), description: form.description.value.trim(), video_url, thumbnail_url,
+        user_id: uid, title: form.title.value.trim(), description: form.description?.value.trim() || '',
+        video_url, thumbnail_url, is_short: isShort,
       }).select('id').single();
       if (error) throw error;
       bar.style.width = '100%';
-      toast('Video published! 🍊');
-      location.hash = `#/watch/${data.id}`;
+      toast(isShort ? 'Short published! 🍊' : 'Video published! 🍊');
+      location.hash = isShort ? `#/shorts/${data.id}` : `#/watch/${data.id}`;
     } catch (err) {
       console.error(err);
       status.textContent = '❌ ' + (err.message || 'Upload failed') +
         (/size|exceed|413/i.test(err.message || '') ? ` — the file is bigger than the storage limit (${MAX_UPLOAD_MB} MB).` : '');
+      btn.disabled = false;
+    }
+  };
+}
+
+function uploadPictures(modes) {
+  view.innerHTML = `
+    <h1 class="page-title">Post pictures</h1>
+    ${modes}
+    <div class="panel">
+      <form class="form" id="picForm">
+        <label class="drop" id="drop">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+          <div><b id="dropText">Drag & drop pictures, or click to choose</b></div>
+          <p>Up to 10 pictures • people swipe through them sideways</p>
+          <input type="file" name="pics" accept="image/*" multiple>
+        </label>
+        <div id="picPreview"></div>
+        <label>Caption<textarea name="caption" maxlength="2000" placeholder="Say something about these pictures"></textarea></label>
+        <div class="progress" hidden id="prog"><div></div></div>
+        <p class="hint" id="upStatus"></p>
+        <button class="btn primary block" type="submit" id="upBtn">Post</button>
+      </form>
+    </div>`;
+  const form = $('#picForm'), drop = $('#drop');
+  let files = [];
+  const show = () => {
+    $('#dropText').textContent = files.length ? `${files.length} picture${files.length > 1 ? 's' : ''} selected (click to add more)` : 'Drag & drop pictures, or click to choose';
+    const el = $('#picPreview');
+    if (!files.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="pic-thumbs">${files.map((f, i) => `
+      <div class="pic-thumb"><img src="${URL.createObjectURL(f)}" alt=""><button type="button" data-rm="${i}" aria-label="Remove">✕</button></div>`).join('')}</div>`;
+    $$('[data-rm]', el).forEach(b => (b.onclick = () => { files.splice(+b.dataset.rm, 1); show(); }));
+  };
+  const add = list => {
+    for (const f of list) if (f.type.startsWith('image/') && files.length < 10) files.push(f);
+    if ([...list].length && files.length >= 10) toast('Max 10 pictures');
+    show();
+  };
+  form.pics.onchange = () => { add(form.pics.files); form.pics.value = ''; };
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => add(e.dataTransfer.files));
+
+  form.onsubmit = async e => {
+    e.preventDefault();
+    if (!files.length) return toast('Choose at least one picture');
+    const big = files.find(f => f.size > MAX_UPLOAD_MB * 1048576);
+    if (big) return ($('#upStatus').textContent = `❌ ${big.name} is over ${MAX_UPLOAD_MB} MB.`);
+    const btn = $('#upBtn'), status = $('#upStatus'), prog = $('#prog'), bar = prog.firstElementChild;
+    btn.disabled = true; prog.hidden = false;
+    const uid = session.user.id, stamp = Date.now(), urls = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        status.textContent = `Uploading picture ${i + 1} of ${files.length}…`;
+        bar.style.width = Math.round((i / files.length) * 90) + '%';
+        const f = files[i];
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${uid}/${stamp}-${i}.${ext}`;
+        const { error } = await sb.storage.from('posts').upload(path, f, { contentType: f.type });
+        if (error) throw error;
+        urls.push(sb.storage.from('posts').getPublicUrl(path).data.publicUrl);
+      }
+      status.textContent = 'Posting…';
+      const { error } = await sb.from('posts').insert({ user_id: uid, caption: form.caption.value.trim(), images: urls });
+      if (error) throw error;
+      bar.style.width = '100%';
+      toast('Posted! 🍊');
+      location.hash = '#/posts';
+    } catch (err) {
+      console.error(err);
+      status.textContent = '❌ ' + (err.message || 'Upload failed');
       btn.disabled = false;
     }
   };
@@ -618,10 +741,248 @@ function pageSettings() {
 
 function showDbError(error) {
   console.error(error);
-  const missing = /relation "?[\w.]+"? does not exist|Could not find the table/i.test(error.message);
+  const missing = /does not exist|Could not find the table/i.test(error.message);
   view.innerHTML = empty('Something went wrong', missing
-    ? 'The database tables aren’t set up yet. Run <code>supabase/schema.sql</code> in your Supabase SQL Editor.'
+    ? 'Part of the database isn’t set up yet. Run <code>supabase/schema.sql</code> and <code>supabase/02_shorts_and_posts.sql</code> in your Supabase SQL Editor.'
     : esc(error.message));
+}
+
+// ================= SHORTS =================
+const ICON = {
+  like: '<svg viewBox="0 0 24 24"><path d="M7 21V10l5-7 1 1c.6.6.8 1.4.6 2.2L13 10h6a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.8 21zM3 10h4v11H3z"/></svg>',
+  comment: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/></svg>',
+  sound: '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
+  mute: '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+  shorts: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="m10 9 5 3-5 3z"/></svg>',
+};
+
+function shortCardHTML(v) {
+  return `<a class="short-card" href="#/shorts/${v.id}">
+    <div class="sthumb">${v.thumbnail_url ? `<img src="${esc(v.thumbnail_url)}" alt="" loading="lazy">` : `<div class="ph"><img src="assets/logo.svg" alt=""></div>`}</div>
+    <h3>${esc(v.title)}</h3><p>${fmtNum(v.views)} views</p>
+  </a>`;
+}
+function shortsShelfHTML(list) {
+  if (!list?.length) return '';
+  return `<section class="shelf">
+    <h2 class="page-title">${ICON.shorts} Shorts <a class="link-btn" href="#/shorts" style="margin-left:auto;font-size:.95rem">See all</a></h2>
+    <div class="shelf-row">${list.map(shortCardHTML).join('')}</div>
+  </section>`;
+}
+
+let shortsMuted = false;
+async function pageShorts(startId) {
+  setActive('shorts');
+  view.classList.add('flush');
+  spinner();
+  let { data, error } = await sb.from('videos').select(VIDEO_SELECT).eq('is_short', true).order('created_at', { ascending: false }).limit(60);
+  if (error) { view.classList.remove('flush'); return showDbError(error); }
+  data = data || [];
+  if (startId) {
+    const i = data.findIndex(v => v.id === startId);
+    if (i > 0) data.unshift(...data.splice(i, 1));
+    else if (i < 0) {
+      const { data: one } = await sb.from('videos').select(VIDEO_SELECT).eq('id', startId).maybeSingle();
+      if (one) data.unshift(one);
+    }
+  }
+  if (!data.length) {
+    view.classList.remove('flush');
+    view.innerHTML = empty('No Shorts yet', 'Upload a vertical video as a Short.', `<a class="btn primary" href="#/upload/short">Upload a Short</a>`);
+    return;
+  }
+  const ids = data.map(v => v.id);
+  const [all, mine] = await Promise.all([
+    sb.from('likes').select('video_id').in('video_id', ids),
+    session ? sb.from('likes').select('video_id').in('video_id', ids).eq('user_id', session.user.id) : { data: [] },
+  ]);
+  const counts = {}; (all.data || []).forEach(l => (counts[l.video_id] = (counts[l.video_id] || 0) + 1));
+  const liked = new Set((mine.data || []).map(l => l.video_id));
+
+  view.innerHTML = `<div class="shorts-feed" id="sf">${data.map(v => {
+    const p = v.profiles || {};
+    return `<section class="short" data-id="${v.id}">
+      <div class="short-stage">
+        <video src="${esc(v.video_url)}" ${v.thumbnail_url ? `poster="${esc(v.thumbnail_url)}"` : ''} loop playsinline preload="metadata"></video>
+        <button class="short-mute icon-btn" aria-label="Sound">${shortsMuted ? ICON.mute : ICON.sound}</button>
+        <div class="short-info">
+          <a href="#/channel/${p.id}" class="short-ch">${avatar(p, 'sm')}<b>@${esc(p.username || 'user')}</b></a>
+          <p>${esc(v.title)}</p>
+        </div>
+      </div>
+      <div class="short-actions">
+        <button class="sa ${liked.has(v.id) ? 'on' : ''}" data-like><span class="ic">${ICON.like}</span><small>${fmtNum(counts[v.id] || 0)}</small></button>
+        <a class="sa" href="#/watch/${v.id}"><span class="ic">${ICON.comment}</span><small>Comments</small></a>
+        <button class="sa" data-share><span class="ic">${ICON.share}</span><small>Share</small></button>
+      </div>
+    </section>`;
+  }).join('')}</div>`;
+
+  const viewed = new Set();
+  const setMuteIcons = () => $$('.short-mute').forEach(b => (b.innerHTML = shortsMuted ? ICON.mute : ICON.sound));
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const vid = e.target.querySelector('video');
+      if (e.isIntersecting) {
+        vid.muted = shortsMuted;
+        vid.play().catch(() => { shortsMuted = true; vid.muted = true; setMuteIcons(); vid.play().catch(() => {}); });
+        const id = e.target.dataset.id;
+        if (!viewed.has(id)) { viewed.add(id); sb.rpc('increment_views', { vid: id }).then(() => {}); }
+      } else {
+        vid.pause();
+      }
+    }
+  }, { threshold: 0.6 });
+  $$('.short').forEach(s => io.observe(s));
+  pageCleanup = () => { io.disconnect(); $$('.short video').forEach(v => v.pause()); };
+
+  $$('.short').forEach(sec => {
+    const id = sec.dataset.id, vid = sec.querySelector('video');
+    vid.onclick = () => (vid.paused ? vid.play() : vid.pause());
+    sec.querySelector('.short-mute').onclick = () => {
+      shortsMuted = !shortsMuted;
+      $$('.short video').forEach(v => (v.muted = shortsMuted));
+      setMuteIcons();
+    };
+    const lb = sec.querySelector('[data-like]');
+    lb.onclick = async () => {
+      if (!requireAuth('Log in to like Shorts')) return;
+      lb.disabled = true;
+      const on = lb.classList.contains('on');
+      const { error } = on
+        ? await sb.from('likes').delete().eq('video_id', id).eq('user_id', session.user.id)
+        : await sb.from('likes').insert({ video_id: id, user_id: session.user.id });
+      lb.disabled = false;
+      if (error) return toast(error.message);
+      counts[id] = (counts[id] || 0) + (on ? -1 : 1);
+      lb.classList.toggle('on', !on);
+      lb.querySelector('small').textContent = fmtNum(counts[id]);
+    };
+    sec.querySelector('[data-share]').onclick = () => shareLink(location.href.split('#')[0] + '#/shorts/' + id);
+  });
+}
+
+async function shareLink(url, title = 'Orange Tube') {
+  if (navigator.share) { try { await navigator.share({ title, url }); } catch {} }
+  else { await navigator.clipboard.writeText(url); toast('Link copied!'); }
+}
+
+// ================= PICTURE POSTS =================
+const POST_SELECT = 'id,caption,images,created_at,user_id,profiles!posts_user_id_fkey(id,username,avatar_url)';
+
+function carouselHTML(images) {
+  const n = images.length;
+  return `<div class="carousel">
+    <div class="track">${images.map(u => `<img src="${esc(u)}" alt="" loading="lazy" draggable="false">`).join('')}</div>
+    ${n > 1 ? `
+      <button class="cz prev" aria-label="Previous" hidden>‹</button>
+      <button class="cz next" aria-label="Next">›</button>
+      <span class="cz-count">1/${n}</span>
+      <div class="dots">${images.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
+  </div>`;
+}
+function wireCarousels(root = document) {
+  $$('.carousel', root).forEach(c => {
+    if (c.dataset.wired) return;
+    c.dataset.wired = 1;
+    const track = $('.track', c), n = track.children.length;
+    if (n < 2) return;
+    const prev = $('.prev', c), next = $('.next', c), dots = $$('.dots i', c), count = $('.cz-count', c);
+    const update = () => {
+      const i = Math.round(track.scrollLeft / track.clientWidth);
+      dots.forEach((d, j) => d.classList.toggle('on', j === i));
+      count.textContent = `${i + 1}/${n}`;
+      prev.hidden = i === 0;
+      next.hidden = i === n - 1;
+    };
+    track.addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+    prev.onclick = e => { e.preventDefault(); track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' }); };
+    next.onclick = e => { e.preventDefault(); track.scrollBy({ left: track.clientWidth, behavior: 'smooth' }); };
+    // mouse drag-to-swipe on desktop
+    let down = false, sx = 0, sl = 0;
+    track.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') return; down = true; sx = e.clientX; sl = track.scrollLeft; track.classList.add('drag'); });
+    window.addEventListener('pointerup', () => {
+      if (!down) return; down = false; track.classList.remove('drag');
+      const i = Math.round(track.scrollLeft / track.clientWidth);
+      track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+    });
+    track.addEventListener('pointermove', e => { if (down) track.scrollLeft = sl - (e.clientX - sx); });
+  });
+}
+
+function postHTML(p, likes, liked) {
+  const u = p.profiles || {};
+  const mine = session?.user.id === p.user_id;
+  return `<article class="post" data-id="${p.id}">
+    <header class="post-head">
+      <a href="#/channel/${u.id}">${avatar(u)}</a>
+      <div><a href="#/channel/${u.id}"><b>${esc(u.username || 'user')}</b></a><small>${timeAgo(p.created_at)}</small></div>
+      ${mine ? `<button class="icon-btn post-del" aria-label="Delete post" style="margin-left:auto">${ICON.trash}</button>` : ''}
+    </header>
+    ${p.caption ? `<p class="post-cap">${linkify(p.caption)}</p>` : ''}
+    ${carouselHTML(p.images || [])}
+    <footer class="post-foot">
+      <button class="btn ${liked ? 'liked' : ''}" data-plike>${ICON.like}<span>${fmtNum(likes)}</span></button>
+      <button class="btn" data-pshare>${ICON.share}Share</button>
+    </footer>
+  </article>`;
+}
+
+async function renderPosts(el, posts) {
+  if (!posts?.length) { el.innerHTML = empty('No posts yet', 'Share some pictures!', `<a class="btn primary" href="#/upload/pictures">Post pictures</a>`); return; }
+  const ids = posts.map(p => p.id);
+  const [all, mine] = await Promise.all([
+    sb.from('post_likes').select('post_id').in('post_id', ids),
+    session ? sb.from('post_likes').select('post_id').in('post_id', ids).eq('user_id', session.user.id) : { data: [] },
+  ]);
+  const counts = {}; (all.data || []).forEach(l => (counts[l.post_id] = (counts[l.post_id] || 0) + 1));
+  const liked = new Set((mine.data || []).map(l => l.post_id));
+  el.innerHTML = `<div class="posts">${posts.map(p => postHTML(p, counts[p.id] || 0, liked.has(p.id))).join('')}</div>`;
+  wireCarousels(el);
+
+  $$('.post', el).forEach(art => {
+    const id = art.dataset.id, post = posts.find(p => p.id === id);
+    const lb = $('[data-plike]', art);
+    const toggleLike = async (forceOn = false) => {
+      if (!requireAuth('Log in to like posts')) return;
+      const on = lb.classList.contains('liked');
+      if (forceOn && on) return;
+      lb.disabled = true;
+      const { error } = on
+        ? await sb.from('post_likes').delete().eq('post_id', id).eq('user_id', session.user.id)
+        : await sb.from('post_likes').insert({ post_id: id, user_id: session.user.id });
+      lb.disabled = false;
+      if (error) return toast(error.message);
+      counts[id] = (counts[id] || 0) + (on ? -1 : 1);
+      lb.classList.toggle('liked', !on);
+      $('span', lb).textContent = fmtNum(counts[id]);
+    };
+    lb.onclick = () => toggleLike();
+    $('.track', art).addEventListener('dblclick', () => { toggleLike(true); art.classList.add('pop'); setTimeout(() => art.classList.remove('pop'), 600); });
+    $('[data-pshare]', art).onclick = () => shareLink(location.href.split('#')[0] + '#/channel/' + post.user_id);
+    const del = $('.post-del', art);
+    if (del) del.onclick = async () => {
+      if (!confirm('Delete this post?')) return;
+      const { error } = await sb.from('posts').delete().eq('id', id);
+      if (error) return toast(error.message);
+      const paths = (post.images || []).map(u => u.match(/\/object\/public\/posts\/(.+)$/)?.[1]).filter(Boolean).map(decodeURIComponent);
+      if (paths.length) await sb.storage.from('posts').remove(paths);
+      art.remove();
+      toast('Post deleted');
+    };
+  });
+}
+
+async function pagePosts() {
+  setActive('posts');
+  spinner();
+  const { data, error } = await sb.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(40);
+  if (error) return showDbError(error);
+  view.innerHTML = `<div class="posts-wrap"><h1 class="page-title">🖼️ Pictures
+    <a class="btn primary" href="#/upload/pictures" style="margin-left:auto">+ Post</a></h1><div id="postList"></div></div>`;
+  renderPosts($('#postList'), data);
 }
 
 // ================= router =================
@@ -629,10 +990,14 @@ function setActive(name) {
   $$('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.nav === name));
 }
 
+let pageCleanup = null;
 async function router() {
+  if (pageCleanup) { pageCleanup(); pageCleanup = null; }
+  view.classList.remove('flush');
   const hash = location.hash.slice(2) || '';
   const [route, ...rest] = hash.split('/');
-  const arg = decodeURIComponent(rest.join('/'));
+  const arg = decodeURIComponent(rest[0] || '');
+  const arg2 = decodeURIComponent(rest[1] || '');
   document.title = 'Orange Tube';
   document.body.classList.remove('side-open');
   window.scrollTo(0, 0);
@@ -642,9 +1007,11 @@ async function router() {
     case 'subscriptions': return pageSubscriptions();
     case 'liked': return pageLiked();
     case 'watch': return pageWatch(arg);
-    case 'channel': return pageChannel(arg);
+    case 'channel': return pageChannel(arg, arg2 || 'videos');
     case 'me': return pageMe();
-    case 'upload': return pageUpload();
+    case 'upload': return pageUpload(arg || 'video');
+    case 'shorts': return pageShorts(arg);
+    case 'posts': return pagePosts();
     case 'settings': return pageSettings();
     case 'search': return pageSearch(arg);
     default: view.innerHTML = empty('Page not found', '', '<a class="btn primary" href="#/">Go home</a>');
