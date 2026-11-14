@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_KEY, MAX_UPLOAD_MB } from './config.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = (s, r = document) => r.querySelector(s);
@@ -487,7 +487,7 @@ function pageUpload() {
         <label class="drop" id="drop">
           <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0-5 5m5-5 5 5M4 20h16"/></svg>
           <div><b id="dropText">Drag & drop a video, or click to choose</b></div>
-          <p>MP4, WebM or MOV</p>
+          <p>MP4, WebM or MOV • up to ${MAX_UPLOAD_MB} MB</p>
           <input type="file" name="video" accept="video/*" required>
         </label>
         <div class="preview-row" id="previews" hidden>
@@ -530,6 +530,10 @@ function pageUpload() {
     e.preventDefault();
     const file = form.video.files[0];
     if (!file) return toast('Choose a video first');
+    if (file.size > MAX_UPLOAD_MB * 1048576) {
+      $('#upStatus').textContent = `❌ This video is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${MAX_UPLOAD_MB} MB, so compress it or trim it first.`;
+      return;
+    }
     const btn = $('#upBtn'), status = $('#upStatus'), prog = $('#prog'), bar = prog.firstElementChild;
     btn.disabled = true; prog.hidden = false; bar.style.width = '5%';
     const uid = session.user.id;
@@ -567,7 +571,7 @@ function pageUpload() {
     } catch (err) {
       console.error(err);
       status.textContent = '❌ ' + (err.message || 'Upload failed') +
-        (/size|exceed|413/i.test(err.message || '') ? ' — your Supabase storage file-size limit may be too low (Storage → Settings).' : '');
+        (/size|exceed|413/i.test(err.message || '') ? ` — the file is bigger than the storage limit (${MAX_UPLOAD_MB} MB).` : '');
       btn.disabled = false;
     }
   };
